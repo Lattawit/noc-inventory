@@ -13,6 +13,7 @@ CREATE TABLE devices (
     vlan INT,
     status VARCHAR(10) NOT NULL DEFAULT 'up',
     location_id INT REFERENCES locations(id) ON DELETE SET NULL,
+    last_checked TIMESTAMP,
     notes TEXT
 );
 

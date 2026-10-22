@@ -20,6 +20,7 @@ services:
       - "5000:5000"
     environment:
       DATABASE_URL: postgresql://noc:nocpass@db:5432/noc_inventory
+      TZ: Asia/Bangkok
     depends_on:
       db:
         condition: service_healthy

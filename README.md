@@ -1,4 +1,3 @@
-cat > README.md << 'EOF'
 # NOC Device Inventory
 
 A web app for managing network devices (routers, switches, firewalls, access points), built for a container course.
@@ -13,4 +12,3 @@ A web app for managing network devices (routers, switches, firewalls, access poi
 - Adminer: http://localhost:8082
 
 Full documentation coming soon.
-EOF
