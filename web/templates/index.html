@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block head %}<meta http-equiv="refresh" content="30">{% endblock %}
+{% block content %}
+{% set total = devices|length %}
+{% set up = devices|selectattr('status', 'equalto', 'up')|list|length %}
+{% set down = total - up %}
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3"><div class="panel stat">
+    <div class="label">Total devices</div><div class="value">{{ total }}</div>
+  </div></div>
+  <div class="col-6 col-md-3"><div class="panel stat up">
+    <div class="label">Online</div><div class="value">{{ up }}</div>
+  </div></div>
+  <div class="col-6 col-md-3"><div class="panel stat down">
+    <div class="label">Offline</div><div class="value">{{ down }}</div>
+  </div></div>
+  <div class="col-6 col-md-3"><div class="panel stat pct">
+    <div class="label">Availability</div>
+    <div class="value">{{ ((up / total * 100) | round(1)) if total else 0 }}%</div>
+  </div></div>
+</div>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h5 class="m-0">Devices</h5>
+  <a href="/add" class="btn btn-noc">+ Add device</a>
+</div>
+
+<div class="panel overflow-hidden">
+  <table class="table align-middle">
+    <thead>
+      <tr>
+        <th>Status</th><th>Hostname</th><th>IP address</th><th>Type</th>
+        <th>Vendor</th><th>VLAN</th><th>Location</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for d in devices %}
+      <tr class="{{ 'row-down' if d.status == 'down' }}">
+        <td><span class="dot {{ d.status }}"></span>{{ d.status|upper }}</td>
+        <td class="mono fw-semibold">{{ d.hostname }}</td>
+        <td class="mono">{{ d.ip_address }}</td>
+        <td><span class="badge type-badge">{{ d.device_type }}</span></td>
+        <td>{{ d.vendor or '-' }}</td>
+        <td class="mono">{{ d.vlan or '-' }}</td>
+        <td>{{ d.location_name or '-' }}</td>
+        <td class="text-end">
+          <a href="/edit/{{ d.id }}" class="btn btn-sm btn-outline-info">Edit</a>
+          <form action="/delete/{{ d.id }}" method="post" class="d-inline"
+                onsubmit="return confirm('Delete {{ d.hostname }}?')">
+            <button class="btn btn-sm btn-outline-danger">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
