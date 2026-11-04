@@ -1,9 +1,11 @@
 import os
+import ipaddress
+import subprocess
+from datetime import datetime
+
 import psycopg2
 import psycopg2.extras
-import subprocess
 from flask import Flask, render_template, request, redirect, url_for
-from datetime import datetime
 
 app = Flask(__name__)
 
@@ -22,21 +24,79 @@ def query(sql, params=None, fetch=True):
                 return cur.fetchall()
 
 
+def ping(ip):
+    try:
+        r = subprocess.run(["ping", "-c", "1", "-W", "1", ip],
+                           capture_output=True, timeout=3)
+        return r.returncode == 0
+    except subprocess.TimeoutExpired:
+        return False
+
+
+def validate(f, device_id=None):
+    errors = []
+    ip = f["ip_address"]
+    try:
+        ipaddress.ip_address(ip)
+    except ValueError:
+        errors.append(f"'{ip}' is not a valid IP address.")
+    else:
+        dup = query(
+            "SELECT hostname FROM devices WHERE ip_address=%s AND id IS DISTINCT FROM %s",
+            (ip, device_id),
+        )
+        if dup:
+            errors.append(f"IP {ip} is already used by {dup[0]['hostname']}.")
+    vlan = f.get("vlan", "").strip()
+    if vlan and not (vlan.isdigit() and 1 <= int(vlan) <= 4094):
+        errors.append("VLAN must be a number between 1 and 4094.")
+    return errors
+
+
+def form_to_device(f):
+    d = dict(f)
+    d["location_id"] = int(d["location_id"]) if d.get("location_id") else None
+    return d
+
+
 @app.route("/")
 def index():
-    devices = query("""
-        SELECT d.*, l.name AS location_name
-        FROM devices d
-        LEFT JOIN locations l ON d.location_id = l.id
-        ORDER BY d.id
-    """)
-    return render_template("index.html", devices=devices)
+    status = request.args.get("status", "all")
+    q = request.args.get("q", "").strip()
+
+    sql = """SELECT d.*, l.name AS location_name
+             FROM devices d
+             LEFT JOIN locations l ON d.location_id = l.id
+             WHERE 1=1"""
+    params = []
+    if status in ("up", "down"):
+        sql += " AND d.status = %s"
+        params.append(status)
+    if q:
+        sql += """ AND (d.hostname ILIKE %s OR d.ip_address ILIKE %s
+                        OR d.vendor ILIKE %s OR l.name ILIKE %s)"""
+        params += [f"%{q}%"] * 4
+    sql += " ORDER BY d.id"
+
+    devices = query(sql, params)
+    totals = query("""SELECT COUNT(*) AS total,
+                             COUNT(*) FILTER (WHERE status='up') AS up
+                      FROM devices""")[0]
+    return render_template("index.html", devices=devices, total=totals["total"],
+                           up=totals["up"], status=status, q=q)
 
 
 @app.route("/add", methods=["GET", "POST"])
 def add():
+    locations = query("SELECT * FROM locations ORDER BY name")
     if request.method == "POST":
-        f = request.form
+        f = request.form.to_dict()
+        f["ip_address"] = f["ip_address"].strip()
+        errors = validate(f)
+        if errors:
+            return render_template("form.html", device=form_to_device(f),
+                                   locations=locations, types=DEVICE_TYPES,
+                                   errors=errors, editing=False)
         query(
             """INSERT INTO devices
                (hostname, ip_address, device_type, vendor, vlan, status, location_id, notes)
@@ -46,15 +106,21 @@ def add():
             fetch=False,
         )
         return redirect(url_for("index"))
-    locations = query("SELECT * FROM locations ORDER BY name")
     return render_template("form.html", device=None, locations=locations,
-                           types=DEVICE_TYPES)
+                           types=DEVICE_TYPES, errors=[], editing=False)
 
 
 @app.route("/edit/<int:device_id>", methods=["GET", "POST"])
 def edit(device_id):
+    locations = query("SELECT * FROM locations ORDER BY name")
     if request.method == "POST":
-        f = request.form
+        f = request.form.to_dict()
+        f["ip_address"] = f["ip_address"].strip()
+        errors = validate(f, device_id)
+        if errors:
+            return render_template("form.html", device=form_to_device(f),
+                                   locations=locations, types=DEVICE_TYPES,
+                                   errors=errors, editing=True)
         query(
             """UPDATE devices SET hostname=%s, ip_address=%s, device_type=%s,
                vendor=%s, vlan=%s, status=%s, location_id=%s, notes=%s
@@ -68,27 +134,14 @@ def edit(device_id):
     rows = query("SELECT * FROM devices WHERE id=%s", (device_id,))
     if not rows:
         return redirect(url_for("index"))
-    locations = query("SELECT * FROM locations ORDER BY name")
     return render_template("form.html", device=rows[0], locations=locations,
-                           types=DEVICE_TYPES)
+                           types=DEVICE_TYPES, errors=[], editing=True)
 
 
 @app.route("/delete/<int:device_id>", methods=["POST"])
 def delete(device_id):
     query("DELETE FROM devices WHERE id=%s", (device_id,), fetch=False)
     return redirect(url_for("index"))
-
-import subprocess
-from datetime import datetime
-
-
-def ping(ip):
-    try:
-        r = subprocess.run(["ping", "-c", "1", "-W", "1", ip],
-                           capture_output=True, timeout=3)
-        return r.returncode == 0
-    except subprocess.TimeoutExpired:
-        return False
 
 
 @app.route("/check/<int:device_id>", methods=["POST"])
@@ -108,6 +161,7 @@ def check_all():
         query("UPDATE devices SET status=%s, last_checked=%s WHERE id=%s",
               (status, datetime.now(), d["id"]), fetch=False)
     return redirect(url_for("index"))
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)

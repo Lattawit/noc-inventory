@@ -1,6 +1,9 @@
 {% extends "base.html" %}
 {% block content %}
-<h4>{{ 'Edit' if device else 'Add' }} device</h4>
+<h4>{{ 'Edit' if editing else 'Add' }} device</h4>
+{% for e in errors %}
+<div class="alert alert-danger py-2" style="max-width:600px">{{ e }}</div>
+{% endfor %}
 <<form method="post" class="panel p-4" style="max-width:600px">
   <div class="mb-3">
     <label class="form-label">Hostname</label>

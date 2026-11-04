@@ -1,8 +1,6 @@
 {% extends "base.html" %}
 {% block head %}<meta http-equiv="refresh" content="30">{% endblock %}
 {% block content %}
-{% set total = devices|length %}
-{% set up = devices|selectattr('status', 'equalto', 'up')|list|length %}
 {% set down = total - up %}
 
 <div class="row g-3 mb-4">
@@ -21,11 +19,31 @@
   </div></div>
 </div>
 
-<div>
-  <form action="/check-all" method="post" class="d-inline">
-    <button class="btn btn-outline-info">Check all</button>
-  </form>
-  <a href="/add" class="btn btn-noc">+ Add device</a>
+<form method="get" class="row g-2 mb-3 align-items-center">
+  <input type="hidden" name="status" value="{{ status }}">
+  <div class="col-12 col-md-5">
+    <input name="q" value="{{ q }}" class="form-control"
+           placeholder="Search hostname, IP, vendor or location...">
+  </div>
+  <div class="col-auto">
+    <button class="btn btn-outline-info">Search</button>
+  </div>
+  <div class="col-auto ms-md-auto btn-group">
+    {% for key, label in [('all', 'All'), ('up', 'Online'), ('down', 'Offline')] %}
+    <a href="{{ url_for('index', status=key, q=q) }}"
+       class="btn btn-sm {{ 'btn-info' if status == key else 'btn-outline-info' }}">{{ label }}</a>
+    {% endfor %}
+  </div>
+</form>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h5 class="m-0">Devices</h5>
+  <div>
+    <form action="/check-all" method="post" class="d-inline">
+      <button class="btn btn-outline-info">Check all</button>
+    </form>
+    <a href="/add" class="btn btn-noc">+ Add device</a>
+  </div>
 </div>
 
 <div class="panel overflow-hidden">
@@ -47,11 +65,11 @@
         <td class="mono">{{ d.vlan or '-' }}</td>
         <td>{{ d.location_name or '-' }}</td>
         <td class="mono text-secondary small">
-        {{ d.last_checked.strftime('%H:%M:%S') if d.last_checked else '-' }}
+          {{ d.last_checked.strftime('%H:%M:%S') if d.last_checked else '-' }}
         </td>
         <td class="text-end">
           <form action="/check/{{ d.id }}" method="post" class="d-inline">
-          <button class="btn btn-sm btn-outline-success">Check</button>
+            <button class="btn btn-sm btn-outline-success">Check</button>
           </form>
           <a href="/edit/{{ d.id }}" class="btn btn-sm btn-outline-info">Edit</a>
           <form action="/delete/{{ d.id }}" method="post" class="d-inline"
@@ -60,6 +78,8 @@
           </form>
         </td>
       </tr>
+      {% else %}
+      <tr><td colspan="9" class="text-center text-secondary py-4">No devices match.</td></tr>
       {% endfor %}
     </tbody>
   </table>
